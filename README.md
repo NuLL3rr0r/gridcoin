@@ -7,5 +7,5 @@ Home page: https://gridcoin.us/
 
 ## Adding with layman
 ```shell
-layman -f -o https://raw.githubusercontent.com/nethershaw/gridcoin/master/repositories.xml -a gridcoin
+layman -f -o https://raw.githubusercontent.com/NuLL3rr0r/gridcoin/master/repositories.xml -a gridcoin
 ```
