@@ -36,6 +36,8 @@ pkg_setup() {
 	export BDB_INCLUDE_PATH="/usr/include/db${BDB_VER:12:3}"
 	use upnp || BUILDOPTS+="USE_UPNP=- "
 	use upnp && BUILDOPTS+="USE_UPNP=1 "
+	use dbus || BUILDOPTS+="USE_DBUS=- "
+	use dbus && BUILDOPTS+="USE_DBUS=1 "
 	use qrcode && BUILDOPTS+="USE_QRCODE=1 "
 
 	enewgroup ${PN}
