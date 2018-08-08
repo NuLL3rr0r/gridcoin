@@ -1,12 +1,9 @@
-# Copyright 1999-2017 Gentoo Foundation
+# Copyright 1999-2018 Gentoo Foundation
 # Distributed under the terms of the GNU General Public License v2
 
 EAPI=6
 
-inherit flag-o-matic
-inherit qmake-utils
-inherit user
-inherit git-r3
+inherit flag-o-matic qmake-utils user git-r3 systemd
 
 DESCRIPTION="Gridcoin Proof-of-Stake based crypto-currency that rewards BOINC computation"
 HOMEPAGE="https://gridcoin.us/"
@@ -16,24 +13,33 @@ EGIT_COMMIT="${PV}"
 LICENSE="MIT"
 SLOT="0"
 KEYWORDS="~amd64 ~x86"
-IUSE="+boinc dbus qrcode qt5 upnp"
 
-DEPEND=">=dev-libs/boost-1.55.0
+IUSE_GUI="qt5 dbus"
+IUSE_DAEMON="daemon"
+IUSE_OPTIONAL="+boinc qrcode upnp"
+IUSE="${IUSE_GUI} ${IUSE_DAEMON} ${IUSE_OPTIONAL}"
+
+REQUIRED_USE="|| ( daemon qt5 ) dbus? ( qt5 ) qrcode? ( qt5 )"
+
+RDEPEND=">=dev-libs/boost-1.55.0
 	>=dev-libs/openssl-1.0.1g
-	>=sys-libs/db-5.3.28:*
 	>=dev-libs/libzip-1.3.0
+	dev-libs/libevent
+	sys-libs/db:5.3[cxx]
 	dbus? ( dev-qt/qtdbus:5 )
-	qrcode? ( media-gfx/qrencode )
 	qt5? ( dev-qt/qtcore:5 dev-qt/qtnetwork:5 dev-qt/qtconcurrent:5 dev-qt/qtcharts:5 )
+	qrcode? ( media-gfx/qrencode )
 	upnp? ( >=net-libs/miniupnpc-1.9.20140401 )
 	boinc? ( sci-misc/boinc )"
-RDEPEND="${DEPEND}"
+DEPEND="${DEPEND}
+	qt5? ( dev-qt/linguist-tools:5 )"
 
-S="${WORKDIR}/Gridcoin-Research-${PV}"
+S="${WORKDIR}/gridcoin-${PV}"
 
 pkg_setup() {
-	BDB_VER="$(best_version sys-libs/db)"
+	BDB_VER="$(best_version sys-libs/db:5.3)"
 	export BDB_INCLUDE_PATH="/usr/include/db${BDB_VER:12:3}"
+	export BDB_LIB_SUFFIX="-${BDB_VER:12:3}"
 	use upnp || BUILDOPTS+="USE_UPNP=- "
 	use upnp && BUILDOPTS+="USE_UPNP=1 "
 	use dbus || BUILDOPTS+="USE_DBUS=- "
@@ -54,18 +60,24 @@ src_unpack() {
 
 src_compile() {
 	append-flags -Wa,--noexecstack
+	append-flags "-I${BDB_INCLUDE_PATH}"
+	if use daemon ; then
+		cd "${S}/src" ; mkdir -p obj
+		emake -f makefile.unix ${BUILDOPTS} NO_UPGRADE=1
+	fi
 	if use qt5 ; then
-		append-flags "-I${BDB_INCLUDE_PATH}"
-		eqmake5 ${BUILDOPTS} NO_UPGRADE=1
+		cd "${S}" ; eqmake5 ${BUILDOPTS} BDB_LIB_SUFFIX=${BDB_LIB_SUFFIX} NO_UPGRADE=1
 		emake
 	fi
-	cd "${S}/src" ; mkdir -p obj
-	emake -f makefile.unix ${BUILDOPTS} NO_UPGRADE=1
 }
 
 src_install() {
-	dobin src/gridcoinresearchd
-	doman doc/gridcoinresearchd.1
+	if use daemon ; then
+		dobin src/gridcoinresearchd
+		doman doc/gridcoinresearchd.1
+		newinitd "${FILESDIR}"/gridcoin.init gridcoin
+		systemd_dounit "${FILESDIR}"/gridcoin.service
+	fi
 	if use qt5 ; then
 		dobin gridcoinresearch
 		doman doc/gridcoinresearch.1
@@ -84,12 +96,13 @@ pkg_postinst() {
 	elog
 	elog "You are using a source compiled version of gridcoin."
 	elog "The daemon can be found at /usr/bin/gridcoinresearchd"
-	use qt5 && elog "The graphical manager can be found at /usr/bin/gridcoinresearch"
+	use qt5 && elog "The graphical wallet can be found at /usr/bin/gridcoinresearch"
 	elog
-	elog "You need to configure this node with a few basic details to do anything useful with gridcoin."
-	elog "You can do this by editing /var/lib/${PN}/.GridcoinResearch/gridcoinresearch.conf"
-	elog "The howto for this configuration file is located at:"
-	elog "http://wiki.gridcoin.us/Gridcoinresearch_config_file"
+	elog "You need to configure this node with a few basic details to do anything"
+	elog "useful with gridcoin. The wallet configuration file is located at:"
+	elog "    /etc/conf.d/gridcoinresearch"
+	elog "The wiki for this configuration file is located at:"
+	elog "    http://wiki.gridcoin.us/Gridcoinresearch_config_file"
 	elog
 	if use boinc ; then
 		elog "To run your wallet as a researcher you should add gridcoin user to boinc group."
@@ -97,4 +110,10 @@ pkg_postinst() {
 		elog "gpasswd -a gridcoin boinc"
 		elog
 	fi
+	ewarn "Previous releases of this package may have built/linked inconsistently"
+	ewarn "against Berkeley DB headers/libraries! If you already had sys-libs/db:6.0"
+	ewarn "available with a prior installation of this package, Gridcoin may prompt"
+	ewarn "you to clear your blockchain and peer databases. Be advised that official"
+	ewarn "snapshots of the blockchain are available to speed up wallet syncing at:"
+	ewarn "https://download.gridcoin.us/download/downloadstake/signed/snapshot.zip"
 }
